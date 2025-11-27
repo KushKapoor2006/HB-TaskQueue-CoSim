@@ -276,9 +276,3 @@ All metrics below are taken from included log files and JSON outputs.
 
 
 ---
-
-## Contact
-
-Kush Kapoor — GitHub: 'https://github.com/KushKapoor2006'
-
----
