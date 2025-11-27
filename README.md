@@ -103,8 +103,22 @@ HAMMERBLADE/                    # top of project
 │  └─ plots/                     # saved PNGs
 
 ├─ HammerBlade.pdf               # Orignal Paper
+├─ bug_report.md                 # Detailed analysis with cycle timelines and vcd logs
 └─ README.md                     # this file
 ```
+
+---
+### Software micromodel highlights (model/sim_results.json)
+
+Key numbers (from `model/sim_results.json`):
+
+* Median latency (SW) = **46.19 ns**
+* Median latency (HW) = **11 ns**
+* Median speedup ≈ **4.2×**
+* Sampled leader utilization (SW trace micro-model) ≈ **0.946**
+* Sampled follower utilization (sample) ≈ **0.0303**
+
+These numbers are reflected in `model/plots/median_latency.png` and other figures in `model/plots/`.
 
 ---
 
@@ -225,18 +239,6 @@ All metrics below are taken from included log files and JSON outputs.
 
 **Interpretation**: Every popped value in the trace failed the golden-model verification.
 
-### Software micromodel highlights (model/sim_results.json)
-
-Key numbers (from `model/sim_results.json`):
-
-* Median latency (SW) = **46.19 ns**
-* Median latency (HW) = **11 ns**
-* Median speedup ≈ **4.2×**
-* Sampled leader utilization (SW trace micro-model) ≈ **0.946**
-* Sampled follower utilization (sample) ≈ **0.0303**
-
-These numbers are reflected in `model/plots/median_latency.png` and other figures in `model/plots/`.
-
 ---
 
 ## Bug summary (brief)
@@ -251,7 +253,6 @@ These numbers are reflected in `model/plots/median_latency.png` and other figure
 
 **Why this matters:** functional correctness failures at the MMIO layer can silently produce incorrect results in the deployed accelerator. Catching this in simulation prevents incorrect silicon or wasted design cycles.
 
-> A full `bug_report.md` will provide cycle-level VCD evidence, exact failing sequence, and recommended patch (e.g., add a sample-ready register or two-phase handshake). That detailed report is suggested as the next deliverable.
 
 ---
 
@@ -269,62 +270,17 @@ These numbers are reflected in `model/plots/median_latency.png` and other figure
 
 ## Future work & next steps
 
-Short-term (next sprint):
-
-1. Produce `bug_report.md` with a minimal reproducer, VCD snippets, and a cycle-by-cycle timeline of the failing sequence (recommended next task).
-2. Implement and test handshake fixes: e.g., a sample-ready bit, an extra cycle guard before sampling DATA_OUT, or stricter ACK/VALID semantics in the MMIO bridge.
-3. Re-run the randomized campaign until `mismatches == 0` in the SW-driven flow.
-
-Medium-term:
-
-1. Add a `make verify` CI target that runs HW build (without GUI), SW host, golden check, and plotting; the target should fail if `mismatches > 0`.
-2. Run Yosys synthesis to check synthesizability and get resource estimates (post-fix).
-3. Formalize pointer invariants with property assertions or bounded model checking.
-
-Research extensions:
-
 * Explore dispatch policies and batch-enqueue for leader cores and quantify end-to-end application-level improvement on microkernels.
 * Scale the workload: increase FIFO depth, follower count, and arrival rates to stress test the scheduler.
+* Add a `make verify` CI target that runs HW build (without GUI), SW host, golden check, and plotting; the target should fail if `mismatches > 0`.
+* Run Yosys synthesis to check synthesizability and get resource estimates (post-fix).
+* Formalize pointer invariants with property assertions or bounded model checking.
 
----
-
-## CV-ready text (pick one or both)
-
-**Verification-focused bullet**
-
-> Built a hardware–software co-simulation and trace-driven verification framework for the HammerBlade task-queue accelerator (Verilator + MMIO C host + Python golden model). The independent Python oracle discovered a systematic FIFO correctness divergence: 3,164 pop mismatches across a 10k randomized campaign, enabling a targeted RTL debugging effort prior to synthesis.
-
-**Performance + verification bullet**
-
-> Implemented trace-driven validation and quantitative evaluation of a leader-queue accelerator. Measured a median latency improvement of **4.2×** (SW median 46 ns vs HW median 11 ns) in microbenchmarks while using a Python golden model to verify FIFO semantics and surface correctness issues.
-
----
-
-## Artifacts to include in a release or application
-
-* `sw/logs/trace.csv`, `sw/logs/results.json`, `sw/logs/golden_results.json`, `hw/run.log` (evidence of discovery)
-* `model/plots/*.png` (visual summary: latency, throughput, utilization)
-* `sw/sw_hw/sim.vcd` (waveform, large) for detailed reviewers
-* `bug_report.md` (recommended next deliverable) with VCD excerpts and repro steps
-
----
-
-## License & citation
-
-Add a `LICENSE` file (MIT suggested) and cite the HammerBlade paper when describing this work in an academic context.
 
 ---
 
 ## Contact
 
 Kush Kapoor — GitHub: `https://github.com/KushKapoor2006`
-(Include your email if you want to be contacted for reviews)
 
 ---
-
-If you would like, I can now:
-
-* Draft `bug_report.md` with an annotated VCD-based reproducer and patch suggestion (recommended), or
-* Implement a `make verify` pipeline target that automates HW, SW, golden check and plotting, and fails on mismatches.
-
-Reply with either `bug_report`, `make_verify`, or `both` and I will prepare the requested next step.
