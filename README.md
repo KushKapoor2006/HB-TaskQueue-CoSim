@@ -1,8 +1,6 @@
 # HB-TaskQueue-CoSim — Detailed Verification Report
 
-**Repository:** `KushKapoor2006/HB-TaskQueue-CoSim`
 **Artifact:** verification + co-simulation platform for HammerBlade task-queue accelerator (Verilator RTL + C MMIO host + Python golden model).
-**Author:** Kush Kapoor
 
 ---
 
@@ -19,8 +17,8 @@ This repo provides everything to reproduce the experiment: Verilator harness (`s
 
 ---
 
-Background & Motivation
------------------------
+## Background & Motivation
+
 
 HammerBlade introduced a heterogeneous **leader--follower** execution model to accelerate fine-grained parallel tasks. In the original paper, the leader core is responsible for **managing queues, dispatching tasks, and coordinating follower cores**. However, the paper also highlighted a **critical bottleneck**:
 
@@ -108,7 +106,7 @@ HAMMERBLADE/                    # top of project
 ```
 
 ---
-### Software micromodel highlights (model/sim_results.json)
+## Software Micromodel Highlights (model/sim_results.json)
 
 Key numbers (from `model/sim_results.json`):
 
@@ -281,6 +279,6 @@ All metrics below are taken from included log files and JSON outputs.
 
 ## Contact
 
-Kush Kapoor — GitHub: `https://github.com/KushKapoor2006`
+Kush Kapoor — GitHub: 'https://github.com/KushKapoor2006'
 
 ---
