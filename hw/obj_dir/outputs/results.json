@@ -1,0 +1,10 @@
+{
+  "attempted_pushes": 3333,
+  "successful_pushes": 3165,
+  "refused_pushes": 168,
+  "attempted_pops": 3363,
+  "successful_pops": 3165,
+  "refused_pops": 198,
+  "mismatches": 0,
+  "sim_cycles": 9642
+}

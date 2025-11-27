@@ -1,0 +1,7 @@
+{
+  "trace_path": "logs/trace.csv",
+  "pushes": 3164,
+  "pops": 3164,
+  "final_queue_len": 0,
+  "mismatches": 3164
+}

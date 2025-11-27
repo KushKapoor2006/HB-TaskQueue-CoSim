@@ -1,0 +1,22 @@
+=== Simulation run at 2025-11-26 20:31:23 UTC ===
+[HOST] Running deterministic test...
+push OK 0xa5a5a5a5
+push OK 0xdeadbeef
+push OK 0x01234567
+push OK 0x89abcdef
+pop OK 0xa5a5a5a5
+pop OK 0xdeadbeef
+push OK 0xcafebabe
+push OK 0x0badf00d
+pop OK 0x01234567
+pop OK 0x89abcdef
+pop OK 0xcafebabe
+pop OK 0x0badf00d
+[HOST] deterministic test done. cycles simulated: 17
+[HOST] Running randomized test seed=1764189083 ops=10000
+[HOST] randomized test done. cycles simulated: 9640
+================= RESULTS =================
+Random test mismatches: 0
+Random test pushed: attempts=3316 success=3140 refused=176
+Random test popped: attempts=3329 success=3140 refused=189
+Cycles simulated (last run): 9640
