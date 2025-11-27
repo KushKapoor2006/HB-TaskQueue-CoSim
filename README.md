@@ -274,5 +274,10 @@ All metrics below are taken from included log files and JSON outputs.
 * Run Yosys synthesis to check synthesizability and get resource estimates (post-fix).
 * Formalize pointer invariants with property assertions or bounded model checking.
 
-
 ---
+
+## Authorship
+
+**Project:** HammerBlade task-queue accelerator + verification
+
+**Author:** Kush Kapoor
