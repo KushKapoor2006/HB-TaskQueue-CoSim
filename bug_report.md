@@ -1,8 +1,6 @@
 # bug_report.md — Bug Analysis
 
 * **Project:** HammerBlade_validation (HB-TaskQueue-CoSim)
-* **Author:** Kush Kapoor
-* **Supervisor:** Prof. `<SUPERVISOR_NAME>` (placeholder — add full name/affiliation)
 
 ---
 
@@ -217,7 +215,7 @@ gtkwave sw/sw_hw/sim.vcd
 ## Contact & attribution
 
 * **Kush Kapoor** — Research implementer
-* **Supervisor:** Prof. `<SUPERVISOR_NAME>` — replace with full name and affiliation for CV/publication.
+* **Supervisor:** Prof Dr. Rohit Chaurasiya (Indian Institute of Technology Jammu)
 
 ---
 
