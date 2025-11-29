@@ -1,6 +1,6 @@
 # bug_report.md — Bug Analysis
 
-* **Project:** HammerBlade_validation (HB-TaskQueue-CoSim)
+**Project:** HammerBlade_validation (HB-TaskQueue-CoSim)
 
 ---
 
