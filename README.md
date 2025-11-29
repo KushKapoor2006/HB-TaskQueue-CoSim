@@ -1,7 +1,7 @@
 # HammerBlade — Detailed Verification & Co‑simulation Report
 
-**Role:** Research assistant / intern project (implementer: Kush Kapoor)
-**Supervisor:** Prof. `<SUPERVISOR_NAME>` (placeholder — add full name/affiliation)
+* **Role:** Research assistant / intern project (implementer: Kush Kapoor)
+* **Supervisor:** Prof. `<SUPERVISOR_NAME>` (placeholder — add full name/affiliation)
 
 ---
 
@@ -156,7 +156,7 @@ python3 model/plot_results.py --trace sw/logs/trace.csv --metrics sw/logs/result
 
 ---
 
-## Design & RTL modules (concise)
+## Design & RTL modules (brief)
 
 *(See the source files in `hw/rtl/` for full details.)*
 
