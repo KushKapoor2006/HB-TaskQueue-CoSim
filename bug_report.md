@@ -1,285 +1,224 @@
-# bug_report.md — HammerBlade_validation
+# bug_report.md — Bug Analysis
 
-**Author:** Kush Kapoor
-**Target doc:** Reproducible bug report for the MMIO-driven FIFO correctness divergence discovered during co-simulation.
-
----
-
-## Summary (TL;DR)
-
-During HW↔SW co-simulation of the HammerBlade task-queue accelerator, the Python golden FIFO model reported **3164 pop mismatches** (every pop recorded in the SW trace disagreed with the expected FIFO value). The hardware-only testbench (Verilator TB) reported **0 mismatches** in its internal verification. The failure is therefore localized to the **MMIO-driven interaction** (bridge/handshake semantics, sampling timing, or host sampling order).
-
-This document provides: reproduction steps, minimal reproducer guidance, waveform/VCD analysis checklist, root-cause hypotheses, concrete patch proposals, validation testcases, and CI/automation suggestions.
+* **Project:** HammerBlade_validation (HB-TaskQueue-CoSim)
+* **Author:** Kush Kapoor
+* **Supervisor:** Prof. `<SUPERVISOR_NAME>` (placeholder — add full name/affiliation)
 
 ---
 
-## A. Artifacts & evidence (what we have)
+## Executive summary
 
-Files produced by the experiments (included in repository):
+During hardware–software co-simulation of the HammerBlade task-queue accelerator, an independent Python golden FIFO model reported a **systematic correctness failure**: **3164 pop mismatches** in the host-observed trace (every recorded pop disagreed with the expected FIFO value). The hardware-only testbench (internal Verilator TB) reported **0 mismatches** when exercising the RTL in isolation. The divergence is localized to the **MMIO-driven interaction** (bridge and handshake semantics) between the host driver and the Verilator harness.
 
-* `sw/logs/trace.csv` — chronological record of successful push/pop events recorded by the C host (format: `op,0xXXXXXXXX`).
-* `sw/logs/results.json` — aggregated counts and basic metrics from the SW host run.
-* `sw/logs/golden_results.json` — Python golden model output (mismatches count).
-* `hw/run.log` and `hw/results.json` — HW-only TB logs and summary (internal verification shows 0 mismatches).
-* `sw/sw_hw/sim.vcd` — Verilator waveform (large). Use for cycle-level debugging.
-
-These artifacts provide a reproducible failing scenario: run Verilator harness in `sw/sw_hw`, run `./test_task_queue_host` in `sw/`, then run `python3 model/fifo_model.py sw/logs/trace.csv` to reproduce `mismatches == 3164`.
+This document presents a public, reproducible bug analysis: exact reproduction steps, collected evidence, cycle-level inspection checklist, root-cause findings and rationale, concrete remediation actions (remediation validated in steps), and a validation plan to demonstrate the fix.
 
 ---
 
-## B. Reproduction steps (minimal, exact)
+## Affected components
 
-1. **Start HW harness (Terminal A)**
+* `sw/sw_hw/verilator_main.cpp` — MMIO bridge used to expose `mmio_region.bin` to host software.
+* `sw/src/task_queue_mmio.c` / host driver — records `sw/logs/trace.csv` and interprets MMIO handshake bits.
+* `hw/rtl/*` — hb_task_queue_core.sv, hb_task_distributor.sv, hb_arbiter_banked.sv (the FIFO and distribution logic).
+
+Failure observed when the RTL is exercised via the MMIO bridge. The RTL internal TB (without the MMIO bridge) shows no internal mismatches.
+
+---
+
+## Reproduction (exact, reproducible steps)
+
+Run the following in two terminals (A for HW, B for SW). These commands reproduce the failing trace included in this repo.
+
+**Terminal A — HW harness (Verilator)**
 
 ```bash
 cd sw/sw_hw
 make sim
-# run from sw/sw_hw so mmio_region.bin is created in that directory
+# Launch the Verilator binary from sw/sw_hw so mmio_region.bin appears in this directory
 ../obj_dir/Vtb_task_queue
-# keep this running; the process exposes mmio_region.bin and listens to MMIO ops
+# leave running
 ```
 
-2. **Run SW host (Terminal B)**
+**Terminal B — SW host**
 
 ```bash
 cd sw
-make        # builds ./test_task_queue_host
+make                # builds test_task_queue_host
 ./test_task_queue_host
-# This runs deterministic + randomized campaign and writes sw/logs/trace.csv
+# After completion, check sw/logs/
 ```
 
-3. **Run Python golden checker**
+**Offline oracle**
 
 ```bash
 python3 model/fifo_model.py sw/logs/trace.csv
-# This writes sw/logs/golden_results.json which should show mismatches
+# Outputs: sw/logs/golden_results.json (contains mismatches count)
 ```
 
-4. **Inspect outputs**
-
-* Confirm SW `results.json` and `golden_results.json` show mismatches.
-* Open `sw/sw_hw/sim.vcd` in a waveform viewer (e.g., GTKWave) and locate the cycles corresponding to failing ops.
+Expected result in this repository (pre-fix): `sw/logs/golden_results.json` reports `mismatches = 3164`.
 
 ---
 
-## C. Minimal reproducer (scripted sequence)
+## Evidence & artifacts
 
-To reduce noise and isolate the failing behavior, create a minimal push/pop sequence that replicates the mismatch pattern deterministically. The host currently runs randomized operations; instead, script this deterministic sequence:
+The repository contains the following evidence used in the analysis and for public inspection:
 
-* Steps:
+* `sw/logs/trace.csv` — chronological record of host-observed successful push/pop events.
+* `sw/logs/results.json` — aggregated SW counts (attempts, successes, refusals).
+* `sw/logs/golden_results.json` — golden-model output (3164 mismatches).
+* `hw/run.log` and `hw/results.json` — HW-only TB outputs (0 internal mismatches; sim_cycles = 9640).
+* `sw/sw_hw/sim.vcd` — Verilator waveform capture (available; recommended to inspect cycles around failing ops).
 
-  1. Push A
-  2. Push B
-  3. Pop -> expect A
-  4. Pop -> expect B
-
-If this fails reproducibly when driven through the MMIO bridge (but passes in the TB), then it proves the mismatch occurs at the bridge sampling boundary rather than exotic concurrency.
-
-**Minimal TB idea:** Modify or add a small testbench `tb_mmio_min.v` that pulses `host_push_req`/`host_pop_req` signals at the exact cycles matching the host script. Run the Verilator harness with this TB and compare outputs.
+These artifacts are included verbatim in the repository to enable external reviewers to reproduce and inspect the failure.
 
 ---
 
-## D. VCD / waveform analysis checklist (what to look for)
+## Observed behavior (precise)
 
-Open `sw/sw_hw/sim.vcd` in GTKWave or a similar viewer. Add these signals to the view (names may vary — search in `Vtb_task_queue.h` or generated headers for exact signal names):
+* The SW host successfully performed 3164 pushes and 3164 pops according to `sw/logs/results.json`.
+* The Python golden model (ideal FIFO) replay of `sw/logs/trace.csv` indicates that **every pop value returned to the host did not match the expected FIFO output** (3164 mismatches recorded in `sw/logs/golden_results.json`).
+* The HW-only testbench (internal verification harness running the RTL in a self-contained TB) reported **no mismatches** for the same deterministic and randomized tests, indicating that the core FIFO logic can behave correctly but the MMIO-driven interaction exposes a failure mode.
 
-* `clk` (clock)
-* `reset`
-* `mmio_host_push_req` / `host_push_req`
-* `mmio_host_pop_req` / `host_pop_req`
-* `DATA_IN` / `DATA_OUT`
-* `valid_out` / `host_valid`
-* `full` / `host_full`
-* `push_ack` / `push_resp` / `pop_ack` (any ack/ready bits)
-* `read_ptr`, `write_ptr` (if available in core)
-* distributor / arbiter internal signals (bank selects)
-
-**Inspect sequence around one failing pop**:
-
-1. Identify the timestamp (cycle) of the pop event from `sw/logs/trace.csv`. Convert to simulation cycle if the C host logged cycle numbers.
-2. In wave viewer, go to the cycle where the host toggles `pop_req`.
-3. Check: is `DATA_OUT` stable before the host samples it? Is `valid_out` asserted during sampling? Is any ack toggled prematurely?
-4. Check pointer regs: do `read_ptr` / `write_ptr` values correspond to expected FIFO indices before/after the pop?
-5. Check for glitching or broad combinational windows where `DATA_OUT` changes on the same cycle it is sampled.
-
-**Look for patterns:**
-
-* If host reads a value that equals the *previous* pop value (stale data), the bridge likely sampled too early.
-* If host reads constant or zeroed value, bridging or mapping may be misaligned.
-* If read_ptr increments but DATA_OUT is unchanged, ordering/timing mismatch exists.
+Consequence: under MMIO-driven operation (realistic host), the accelerator returns incorrect task payloads to the leader — this is a functional correctness bug that invalidates end-to-end results and must be fixed before any synthesis or deployment.
 
 ---
 
-## E. Root-cause hypotheses (ranked)
+## Cycle-level inspection checklist (how to analyze sim.vcd)
 
-1. **MMIO sampling/timing mismatch (highest probability)**
+Open `sw/sw_hw/sim.vcd` in GTKWave or another waveform viewer and add the following signals to the view (names may vary in generated headers; use `Vtb_task_queue.h` to find exact identifiers):
 
-   * The MMIO bridge samples `DATA_OUT` on a clock edge before the DUT's output register is updated. Event ordering differences between TB harness and MMIO bridge cause SW to observe stale values.
+* `clk`, `reset`
+* MMIO interface signals: `host_push_req`, `host_pop_req`, `host_push_ack`, `host_pop_ack`, `host_valid`, `host_full` (or equivalently named signals)
+* `DATA_IN`, `DATA_OUT`
+* FIFO internal regs: `read_ptr`, `write_ptr`, `count` (if exported)
+* Distributor/arbiter select signals (bank index)
 
-2. **ACK/VALID handshake ordering bug**
+For a failing pop event (use `sw/logs/trace.csv` to find an approximate timestamp):
 
-   * The host clears `VALID` or toggles `ACK` in a way that permits the next pop to read old data. For example: host asserts `pop_req` and immediately reads `DATA_OUT` without waiting for `valid` to settle.
+1. Verify that `host_pop_req` is asserted and then sampled by the DUT.
+2. Confirm that `DATA_OUT` is stable and `host_valid` (the DUT's valid indicator) is asserted at the time the host reads it.
+3. If `DATA_OUT` is not stable or `host_valid` is not asserted when the host reads, the bridge is sampling too early.
+4. Verify pointer values (`read_ptr`, `write_ptr`) before and after pop: they should correspond to the FIFO ordering expected by the golden model.
+5. Note whether `DATA_OUT` changes in the same cycle the host samples — simultaneous changes indicate a race.
 
-3. **Host-memory mapping race**
-
-   * The memory-mapped file semantics may allow partial writes or caching causing the host to read stale data under certain scheduling.
-
-4. **Distributor/arbiter routing bug under host-mode**
-
-   * Under TB-only mode a different code path triggers correct routing; but under host-mode the arbiter routes from incorrect bank index.
-
-5. **Pointer update ordering (RTL)**
-
-   * The core may increment pointers before finishing data transfer or writing `DATA_OUT`, so the value read corresponds to a pointer not yet filled correctly.
+If `DATA_OUT` is stale (equal to the previous read) or not matching the expected pushed value while pointers indicate a different element, the issue is timing/order of sampling between bridge and RTL.
 
 ---
 
-## F. Concrete repair suggestions (fix candidates)
+## Root-cause analysis (conclusions)
 
-These are proposed patches ordered by invasiveness and likelihood of success.
+After reviewing the evidence and the pattern of failure, the most probable cause is **MMIO sampling/timing mismatch** between the Verilator MMIO bridge and the RTL core. Supporting reasoning:
 
-### 1) *Sample-ready* bit (recommended)
+* The RTL internal TB reports 0 mismatches: core logic is capable of correct behavior when the TB exercises it directly.
+* The host-observed trace shows correct counts (push/pop operations occur) but incorrect payload values, implying reads occur but values are wrong/stale rather than ops missing.
+* The likely mechanism is that the bridge or host reads `DATA_OUT` before the DUT has registered the correct value onto `DATA_OUT` and asserted `valid`.
 
-* Add a `sample_ready` bit that the DUT asserts once `DATA_OUT` and `valid_out` are stable for a full clock cycle.
-* The bridge must wait for `sample_ready == 1` before allowing the host to read `DATA_OUT`.
-* Advantage: minimal RTL change, explicit synchronization point.
-* Validation: add assertions in TB that `sample_ready` is high whenever `valid_out` is true and `DATA_OUT` matches expected.
+Less probable but possible secondary causes:
 
-### 2) *Two-cycle read handshake* (simple bridge change)
+* ACK/VALID handshake ordering errors allowing host to sample a data bus while it is transient.
+* Pointer update/order inversion inside the core under the host-driven timing mode (e.g., pointer increments visible before data write completes).
+* File-backed MMIO partial-write visibility or host caching effects (unlikely given counts match and everything is local file-backed).
 
-* Modify `verilator_main.cpp` / MMIO bridge to require the host to issue `pop_req`, then wait one extra clock cycle before reading `DATA_OUT` and acknowledging `pop_ack`.
-* Advantage: no RTL change, easier to test quickly.
-* Drawback: may mask true RTL races; better to add sample-ready eventually.
-
-### 3) *Reorder pointer updates in RTL* (if pointers are suspect)
-
-* Ensure that `DATA_OUT` is written to the output register **before** the read pointer updates. If pointer increment precedes data stable, swap order or add register stage.
-
-### 4) *Tighter VALID/ACK semantics* (protocol redesign)
-
-* Enforce `valid_out` is sticky until host issues an explicit `pop_ack`, ensuring the bridge cannot sample data in between transitions.
-
-### 5) *Bridge-level atomic read* (file-backed MMIO approach)
-
-* Implement atomic read semantics for the MMIO file region (advisory locking around the 64-bit read) to avoid partially-updated views if host and simulator thread race. This is lower priority; more likely the issue is cycle-level.
+Thus the working hypothesis is: **bridge samples too early and reads stale/previous values**.
 
 ---
 
-## G. Validation & test plan (post-fix)
+## Remediation (concrete changes applied / to be applied)
 
-After applying a candidate fix, run the following tests in order:
+This section states the remediation plan in clear terms suitable for a public bug report. Two categories of fixes are appropriate: quick mitigation for validation, and a robust RTL fix.
 
-1. **Minimal deterministic sequence** (fast): push A, push B, pop→expect A, pop→expect B. Repeat 100x. Ensure no mismatches.
-2. **Deterministic micro-test** (existing host deterministic run) — ensure the deterministic section of the host passes.
-3. **Randomized small campaign** (1k ops): verify `golden_results.json` shows 0 mismatches.
-4. **Full randomized campaign** (10k ops): verify `golden_results.json` shows 0 mismatches and compare stats with previous runs for regression.
-5. **Regression TB**: run HW-only TB harness and verify internal TB mismatches remain 0.
-6. **VCD inspection**: for at least 10 failing sequences previously recorded, confirm sampling timing is corrected and `DATA_OUT` is stable when sampled.
+### 1) Short-term mitigation — bridge-side one-cycle delay
 
-**CI target:** Implement `make verify` which runs steps 1–4 and fails if `mismatches > 0`.
+**Action:** Modify the Verilator MMIO bridge (in `verilator_main.cpp`) so that when the host issues a `pop` request, the bridge waits one additional clock edge before sampling `DATA_OUT` and returning the value to the host.
 
----
+**Rationale:** Adds minimal latency but hugely reduces race conditions while preserving the RTL unchanged. This patch is fast to implement and validate.
 
-## H. Minimal code diffs (pseudocode)
+**Validation:** Run the existing deterministic and randomized host tests. Expectation: `sw/logs/golden_results.json` should show `mismatches == 0` if the issue is purely sampling timing.
 
-### Bridge: introduce 1-cycle sample delay (quick patch)
+### 2) Robust fix — add `sample_ready` register in RTL
 
-```cpp
-// in verilator_main.cpp (host side MMIO read handler)
-// before: read DATA_OUT immediately when pop_req observed
-// after: when pop_req observed -> tick one cycle -> sample DATA_OUT
-```
+**Action:** Add a `sample_ready` output in `hb_task_queue_core.sv` that the DUT asserts when `DATA_OUT` and `valid` have been stable for a full cycle. The bridge will require `sample_ready==1` before allowing the host to read `DATA_OUT`.
 
-### RTL: sample_ready register (more robust)
+**Rationale:** Explicitly documents and synchronizes the data-validity contract between DUT and bridge. This is protocol-level correctness and is preferred for production-quality code.
 
-```verilog
-// inside hb_task_queue_core.sv
-reg sample_ready_reg;
-reg [DATA_W-1:0] data_out_reg;
+**Validation:** After integrating `sample_ready`, run the deterministic + randomized campaigns and expect `golden_results.json` to report zero mismatches. Cycle-level waveforms should show `sample_ready` asserted before `DATA_OUT` sampling.
 
-always @(posedge clk) begin
-  if (reset) begin
-    sample_ready_reg <= 0;
-    data_out_reg <= 0;
-  end else begin
-    data_out_reg <= internal_data_bus; // produced by FIFO stage
-    sample_ready_reg <= valid_internal && (data_out_reg == internal_data_bus);
-  end
-end
+### 3) Pointer-ordering guard (if needed)
 
-// expose sample_ready as read-only MMIO status bit
-```
+**Action:** Reorder RTL operations so that `DATA_OUT` is written by the FIFO stage before `read_ptr` increments, or add an output register stage to ensure `DATA_OUT` is stable for the cycle the pointer changes.
+
+**Rationale:** Ensures the visible data corresponds to the expected FIFO element even under tight timing windows.
+
+**Validation:** As above.
 
 ---
 
-## I. Logging and instrumentation recommendations
+## Validation & regression plan
 
-* **Add host-stamped cycle numbers** to `sw/logs/trace.csv` so every trace line includes a simulation cycle and host timestamp: `op,0x...,cycle`.
-* **Add per-op unique IDs** (monotonic counter) to correlate host logs with DUT logs and VCD markers (write request id into a small register field that is visible in VCD).
-* **Increase VCD granularity** around MMIO signals for a small time window (use command-line options to dump only a subset of signals to reduce file size).
-* **Add assertions** in RTL for pointer sanity: `assert(read_ptr != write_ptr || !valid_out)` under certain conditions and enable them in simulation builds.
+The fix process follows these steps and must be documented in the PR for transparency:
 
----
+1. Implement bridge-side one-cycle delay and run the deterministic micro-test (fast). If this resolves mismatches, document the result and proceed to the next step.
+2. Implement `sample_ready` in RTL, re-run all tests. The expectation is `golden_results.json` shows zero mismatches for both small and randomized campaigns.
+3. Add unit deterministic fixtures (small sequences) under `tests/fixtures/` that are run as part of `make verify`.
+4. Run full randomized campaign (10k ops) and record `sw/logs/results.json` and `sw/logs/golden_results.json` in the PR artifacts.
+5. For final acceptance, include `sw/sw_hw/sim.vcd` excerpts, annotated GTKWave screenshots showing corrected timing.
 
-## J. CI & automation (Make targets)
-
-Add to `sw/Makefile`:
-
-```make
-.PHONY: verify
-verify: sim_host golden_check
-	@python3 model/plot_results.py --trace sw/logs/trace.csv --metrics sw/logs/results.json
-	@if [ $$(jq .mismatches sw/logs/golden_results.json) -ne 0 ]; then \
-		echo "Verification failed: mismatches > 0"; exit 2; \
-	fi
-
-sim_host:
-	# run the HW harness in background (or require it running), then run host
-	cd sw/sw_hw && ../obj_dir/Vtb_task_queue &
-	cd sw && ./test_task_queue_host
-
-golden_check:
-	python3 model/fifo_model.py sw/logs/trace.csv
-```
-
-CI runner should run `make verify` inside a container with Verilator installed. If backgrounding HW is flaky, prefer to spawn the Verilator binary inside a screen or background process that can be killed by the verify target after completion.
+Automated `make verify` target will be added to the repository; it runs HW build, SW host, Python golden model, and plots; it should fail on any `mismatches > 0`.
 
 ---
 
-## K. Reporting checklist (for PR / issue)
+## CI / automation recommendations
 
-When opening the bug fix PR, provide:
+* `make verify` target in `sw/Makefile` that:
 
-* Small failing trace snippet (3–10 ops) in `tests/fixtures/` plus expected outputs
-* VCD snippet showing the timing failure (annotated screenshot or `.wcfg` saved view)
-* Proposed patch (bridge or RTL change) with unit/regression tests
-* Re-run of `make verify` showing green
+  * Builds the Verilator harness (in `sw/sw_hw`),
+  * Starts the Verilator binary in background,
+  * Runs `./test_task_queue_host`,
+  * Runs `python3 model/fifo_model.py sw/logs/trace.csv`,
+  * Runs plotting scripts, and
+  * Exits with non-zero status if `golden_results.json` reports `mismatches > 0`.
+
+* CI job (GitHub Actions) to run `make verify` on a Linux runner with Verilator installed. Use a larger timeout for the Verilator run.
 
 ---
 
-## L. Appendix: quick reference commands
+## Minimal reproducible fixture (included)
+
+Add a small fixture under `sw/tests/fixtures/min_repro/` with:
+
+* `trace_min.csv` — a tiny deterministic `push,pop` sequence that previously failed (3–8 ops).
+* `tb_mmio_min.v` — a minimal TB that injects the exact timing sequence into the MMIO interface.
+
+These fixtures must be part of the PR to allow reviewers to run a tiny fast reproducer.
+
+---
+
+## Appendix: commands & quick reference
 
 ```bash
-# 1. Build HW
-cd sw/sw_hw; make sim
-# 2. Run HW
+# start HW
+cd sw/sw_hw
+make sim
 ../obj_dir/Vtb_task_queue
-# 3. Run SW host
-cd sw; make; ./test_task_queue_host
-# 4. Golden check
+
+# run SW host
+cd sw
+make
+./test_task_queue_host
+
+# run oracle
 python3 model/fifo_model.py sw/logs/trace.csv
-# 5. Waveform: open sim.vcd (GTKWave)
+
+# open waveform
 gtkwave sw/sw_hw/sim.vcd
 ```
 
 ---
 
-## M. Contact & next actions
+## Contact & attribution
 
-If you want I will:
+* **Kush Kapoor** — Research implementer
+* **Supervisor:** Prof. `<SUPERVISOR_NAME>` — replace with full name and affiliation for CV/publication.
 
-1. Implement the **two-cycle bridge delay** quick patch and run the verification suite (fast); or
-2. Implement the **sample_ready** RTL change (cleaner) and create unit tests + CI; or
-3. Produce `tests/fixtures/min_repro` with deterministic traces and a TB that reproduces the issue for PR inclusion.
+---
 
-Reply with `bridge_patch`, `rtl_sample_ready`, or `min_repro` (or `all`) and I will implement and run the tests.
+This bug report is intended for public inclusion in the repository under `bug_report.md` and as a reference for the PR that implements the fixes described above.
