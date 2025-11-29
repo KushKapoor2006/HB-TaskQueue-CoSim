@@ -7,7 +7,7 @@
 
 ## TL;DR
 
-This repository implements a verification-first hardware–software co‑simulation platform for a HammerBlade-style leader/follower task-queue accelerator. It combines:
+Hardware acceleration of HammerBlade’s leader/follower dispatch bottleneck, validated through MMIO-driven co-simulation and independent Python FIFO correctness checking. It combines:
 
 * cycle-accurate RTL simulation (Verilator),
 * a native C MMIO host driver that exercises the accelerator via a memory-mapped region,
