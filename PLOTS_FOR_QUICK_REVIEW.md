@@ -1,4 +1,4 @@
-<img width="800" height="500" alt="median_latency" src="https://github.com/user-attachments/assets/cbef7dbb-33ae-45e8-b2ce-9a8229395822" />
+<img width="800" height="500" alt="median_latency" src="https://github.com/user-attachments/assets/94c3d597-16c4-42e2-b634-1f7cd7a12dc4" />
 
 
 
