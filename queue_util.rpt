@@ -1,0 +1,32 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2023.1 (lin64) Build 3865809 Sun May  7 15:04:56 MDT 2023
+| Date         : Sat Jan  3 23:46:23 2026
+| Host         : kk running 64-bit Ubuntu 22.04.5 LTS
+| Command      : report_utilization -hierarchical -file queue_util.rpt
+| Design       : task_queue_top
+| Device       : xc7z007sclg400-1
+| Speed File   : -1
+| Design State : Synthesized
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++--------------------+---------------------+------------+------------+---------+------+-----+--------+--------+------------+
+|      Instance      |        Module       | Total LUTs | Logic LUTs | LUTRAMs | SRLs | FFs | RAMB36 | RAMB18 | DSP Blocks |
++--------------------+---------------------+------------+------------+---------+------+-----+--------+--------+------------+
+| task_queue_top     |               (top) |         41 |         17 |      24 |    0 |  81 |      0 |      0 |          0 |
+|   (task_queue_top) |               (top) |          0 |          0 |       0 |    0 |   0 |      0 |      0 |          0 |
+|   u_arb            |   hb_arbiter_banked |          1 |          1 |       0 |    0 |   3 |      0 |      0 |          0 |
+|   u_dist           | hb_task_distributor |          2 |          2 |       0 |    0 |  65 |      0 |      0 |          0 |
+|   u_queue          |  hb_task_queue_core |         38 |         14 |      24 |    0 |  13 |      0 |      0 |          0 |
++--------------------+---------------------+------------+------------+---------+------+-----+--------+--------+------------+
+
+
