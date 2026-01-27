@@ -15,7 +15,7 @@ Hardware acceleration of HammerBlade’s leader/follower dispatch bottleneck, va
 * plotting / analysis scripts for quantitative evaluation.
 
 ### FPGA Implementation Metrics
-Synthesized using **Vivado 2023.1** targeting **Xilinx Zynq-7020**.
+Synthesized using **Vivado 2023.1** targeting **Xilinx Zynq-7000**.
 
 | Metric | Value | Technical Context |
 | :--- | :--- | :--- |
