@@ -1,9 +1,5 @@
 # HammerBlade — Detailed Verification & Co‑simulation Report
 
-* **Role:** Research assistant / intern project (implementer: Kush Kapoor)
-* **Supervisor:** Prof Dr. Rohit Chaurasiya (Indian Institute of Technology Jammu)
-
----
 
 ## TL;DR
 
